@@ -1,0 +1,653 @@
+name: Audits
+
+on: [workflow_dispatch, pull_request]
+
+permissions:
+  contents: read
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  cargo-vet:
+    name: Vet Rust dependencies
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+
+      - name: Install cargo-vet
+        uses: actions-rs/cargo@v1
+        with:
+          command: install
+          args: cargo-vet
+
+      - name: Run cargo vet --locked
+        uses: actions-rs/cargo@v1
+        with:
+          command: vet
+          args: --locked
+
+#name: Security audit
+
+#on: [workflow_dispatch, pull_request]
+
+#jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions-rs/install@v0.1
+        with:
+          crate: cargo-audit
+          # use-tool-cache: true
+      - uses: actions-rs/audit-check@v1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+#name: CI checks
+
+#on: [workflow_dispatch, pull_request]
+
+#jobs:
+  test:
+    name: Test on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macOS-latest]
+
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: 1.59.0
+          override: true
+      - name: cargo fetch
+        uses: actions-rs/cargo@v1
+        with:
+          command: fetch
+      - name: Build tests
+        uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: --all --verbose --exclude rage --all-features --tests
+      - name: Run tests
+        uses: actions-rs/cargo@v1
+        with:
+          command: test
+          args: --all --verbose --exclude rage --all-features
+
+  build:
+    name: Build target ${{ matrix.target }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        target:
+          - wasm32-wasi
+
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: 1.59.0
+          override: true
+      - name: Add target
+        run: rustup target add ${{ matrix.target }}
+      - name: cargo fetch
+        uses: actions-rs/cargo@v1
+        with:
+          command: fetch
+      - name: Build for target
+        working-directory: ./age
+        run: cargo build --verbose --no-default-features --target ${{ matrix.target }}
+
+  bitrot:
+    name: Bitrot
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: 1.59.0
+          override: true
+      - name: Install linux build dependencies
+        run: sudo apt install libfuse-dev
+      - name: cargo check
+        uses: actions-rs/cargo@v1
+        with:
+          command: check
+          args: --tests --examples --benches --all-features
+
+  clippy:
+    name: Clippy (1.59.0)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: 1.59.0
+          components: clippy
+          override: true
+      - name: Install linux build dependencies
+        run: sudo apt install libfuse-dev
+      - name: Clippy check
+        uses: actions-rs/clippy-check@v1
+        with:
+          name: Clippy (1.59.0)
+          token: ${{ secrets.GITHUB_TOKEN }}
+          args: --all-features --all-targets -- -D warnings
+
+  codecov:
+    name: Code coverage
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+      - name: Install linux build dependencies
+        run: sudo apt install libfuse-dev
+      - name: Generate coverage report
+        uses: actions-rs/tarpaulin@v0.1
+        with:
+          version: '0.19.1'
+          args: --workspace --release --all-features --timeout 180 --out Xml
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3.1.1
+        with:
+          fail_ci_if_error: true
+
+  doc-links:
+    name: Intra-doc links
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: 1.59.0
+          override: true
+      - name: cargo fetch
+        uses: actions-rs/cargo@v1
+        with:
+          command: fetch
+
+      # Ensure intra-documentation links all resolve correctly
+      # Requires #![deny(intra_doc_link_resolution_failure)] in crates.
+      - name: Check intra-doc links
+        uses: actions-rs/cargo@v1
+        with:
+          command: doc
+          args: --all --exclude rage --all-features --document-private-items
+
+  fmt:
+    name: Rustfmt
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: 1.59.0
+          components: rustfmt
+          override: true
+      - name: Check formatting
+        uses: actions-rs/cargo@v1
+        with:
+          command: fmt
+          args: --all -- --check
+#name: Benchmarks
+
+#on: [workflow_dispatch, pull_request]
+
+#env:
+  #CARGO_TERM_COLOR: always
+
+#jobs:
+  benchmarks_build:
+    name: Run benchmarks
+    runs-on: ubuntu-latest
+    env:
+      CRITERION_TOKEN: ${{ secrets.CRITERION_TOKEN }}
+    steps:
+      - uses: actions/checkout@v3
+      - name: Run benchmarks
+        run: |
+          # run benchmarks and save baseline to "criterion.dev.temp"
+          cargo bench -- --verbose --noplot
+      - name: Upload benchmarks
+        run: |
+          # upload the file
+          bash <(curl -s https://criterion.dev/bash)
+#name: Interoperability tests
+
+#on: [workflow_dispatch, pull_request]
+
+#jobs:
+  build-rage:
+    name: Build rage
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Create FiloSottile/age status
+        if: always() && github.event.action == 'age-interop-request'
+        run: |
+          curl -X POST https://api.github.com/repos/FiloSottile/age/statuses/${{ github.event.client_payload.sha }} \
+          -H 'Accept: application/vnd.github.everest-preview+json' \
+          -H 'Authorization: token ${{ secrets.AGE_STATUS_ACCESS_TOKEN }}' \
+          --data '{"state": "pending", "target_url": "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}", "description": "In progress", "context": "Interoperability tests / Build rage"}'
+
+      - uses: actions/checkout@v3
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: 1.59.0
+          override: true
+      - name: cargo build
+        run: cargo build --release --features unstable
+        working-directory: ./rage
+      - uses: actions/upload-artifact@v3
+        with:
+          name: rage
+          path: target/release/rage
+
+      - name: Update FiloSottile/age status with result
+        if: always() && github.event.action == 'age-interop-request'
+        run: |
+          curl -X POST https://api.github.com/repos/FiloSottile/age/statuses/${{ github.event.client_payload.sha }} \
+          -H 'Accept: application/vnd.github.everest-preview+json' \
+          -H 'Authorization: token ${{ secrets.AGE_STATUS_ACCESS_TOKEN }}' \
+          --data '{"state": "${{ job.status }}", "target_url": "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}", "description": "Finished", "context": "Interoperability tests / Build rage"}'
+
+  build-age:
+    name: Build age
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Create FiloSottile/age status
+        if: always() && github.event.action == 'age-interop-request'
+        run: |
+          curl -X POST https://api.github.com/repos/FiloSottile/age/statuses/${{ github.event.client_payload.sha }} \
+          -H 'Accept: application/vnd.github.everest-preview+json' \
+          -H 'Authorization: token ${{ secrets.AGE_STATUS_ACCESS_TOKEN }}' \
+          --data '{"state": "pending", "target_url": "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}", "description": "In progress", "context": "Interoperability tests / Build age"}'
+
+      - name: Set up Go 1.19
+        uses: actions/setup-go@v3
+        with:
+          go-version: 1.19
+        id: go
+
+      - name: Use specified FiloSottile/age commit
+        if: github.event.action == 'age-interop-request'
+        run: echo "AGE_REF=${{ github.event.client_payload.sha }}" >> $GITHUB_ENV
+      - name: Use FiloSottile/age current main
+        if: github.event.action != 'age-interop-request'
+        run: echo "AGE_REF=refs/heads/main" >> $GITHUB_ENV
+
+      - name: Check out FiloSottile/age
+        uses: actions/checkout@v3
+        with:
+          repository: FiloSottile/age
+          ref: ${{ env.AGE_REF }}
+          path: go-age/age
+      - name: go build
+        run: |
+          cd $GITHUB_WORKSPACE/go-age/age
+          go build filippo.io/age/cmd/age
+      - uses: actions/upload-artifact@v3
+        with:
+          name: age
+          path: go-age/age/age
+
+      - name: Update FiloSottile/age status with result
+        if: always() && github.event.action == 'age-interop-request'
+        run: |
+          curl -X POST https://api.github.com/repos/FiloSottile/age/statuses/${{ github.event.client_payload.sha }} \
+          -H 'Accept: application/vnd.github.everest-preview+json' \
+          -H 'Authorization: token ${{ secrets.AGE_STATUS_ACCESS_TOKEN }}' \
+          --data '{"state": "${{ job.status }}", "target_url": "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}", "description": "Finished", "context": "Interoperability tests / Build age"}'
+
+  interop_test:
+    name: ${{ matrix.alice }} -> ${{ matrix.bob }} [${{ matrix.recipient }}]
+    runs-on: ubuntu-latest
+    needs: [build-rage, build-age]
+    strategy:
+      matrix:
+        alice: [rage, age]
+        bob: [rage, age]
+        recipient: [x25519, ssh-rsa, ssh-ed25519]
+      fail-fast: false
+
+    steps:
+      - name: Create FiloSottile/age status
+        if: always() && github.event.action == 'age-interop-request'
+        run: |
+          curl -X POST https://api.github.com/repos/FiloSottile/age/statuses/${{ github.event.client_payload.sha }} \
+          -H 'Accept: application/vnd.github.everest-preview+json' \
+          -H 'Authorization: token ${{ secrets.AGE_STATUS_ACCESS_TOKEN }}' \
+          --data '{"state": "pending", "target_url": "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}", "description": "In progress", "context": "Interoperability tests / ${{ matrix.alice }} -> ${{ matrix.bob }} [${{ matrix.recipient }}]"}'
+
+      # Download the binaries to test
+      - uses: actions/download-artifact@v3
+        with:
+          name: rage
+      - uses: actions/download-artifact@v3
+        with:
+          name: age
+      - run: chmod +x rage
+      - run: chmod +x age
+
+      # Prepare the test environment
+      - name: Install dos2unix for simulating Windows files
+        run: sudo apt install dos2unix
+      - name: Write (very not private) age X25519 key
+        if: matrix.recipient == 'x25519'
+        run: echo "AGE-SECRET-KEY-1TRYTV7PQS5XPUYSTAQZCD7DQCWC7Q77YJD7UVFJRMW4J82Q6930QS70MRX" >key.txt
+      - name: Set the corresponding age x25519 recipient
+        if: matrix.recipient == 'x25519'
+        run: echo "AGE_PUBKEY=-r age1y8m84r6pwd4da5d45zzk03rlgv2xr7fn9px80suw3psrahul44ashl0usm" >> $GITHUB_ENV
+      - name: Generate an ssh-rsa key
+        if: matrix.recipient == 'ssh-rsa'
+        run: ssh-keygen -t rsa -N "" -f key.txt
+      - name: Generate an ssh-ed25519 key
+        if: matrix.recipient == 'ssh-ed25519'
+        run: ssh-keygen -t ed25519 -N "" -f key.txt
+      - name: Set the corresponding SSH recipient
+        if: matrix.recipient == 'ssh-rsa' || matrix.recipient == 'ssh-ed25519'
+        run: echo "AGE_PUBKEY=-R key.txt.pub" >> $GITHUB_ENV
+      - name: Store key.txt in case we need it
+        uses: actions/upload-artifact@v3
+        with:
+          name: ${{ matrix.alice }}_${{ matrix.bob }}_${{ matrix.recipient }}_key.txt
+          path: key.txt
+
+      # Tests!
+      - name: Encrypt to file
+        run: echo "Test string" | ./${{ matrix.alice }} -o test.age $AGE_PUBKEY
+      - name: Decrypt from file
+        run: ./${{ matrix.bob }} -d -i key.txt test.age | grep -q "^Test string$"
+      - name: Store test.age
+        uses: actions/upload-artifact@v3
+        if: failure()
+        with:
+          name: ${{ matrix.alice }}_${{ matrix.bob }}_${{ matrix.recipient }}_test.age
+          path: test.age
+
+      - name: Generate a file to encrypt
+        run: echo "2 test 2 string" > test2.txt
+      - name: Encrypt to ASCII-armored file
+        run: ./${{ matrix.alice }} -a -o test2.age $AGE_PUBKEY test2.txt
+      - name: Decrypt from ASCII-armored file
+        run: ./${{ matrix.bob }} -d -i key.txt test2.age | grep -q "^2 test 2 string$"
+      - name: Store test2.age
+        uses: actions/upload-artifact@v3
+        if: failure()
+        with:
+          name: ${{ matrix.alice }}_${{ matrix.bob }}_${{ matrix.recipient }}_test2.age
+          path: test2.age
+
+      - name: Convert file to CRLF
+        run: unix2dos test2.age
+      - name: Decrypt from ASCII-armored CRLF file
+        run: ./${{ matrix.bob }} -d -i key.txt test2.age | grep -q "^2 test 2 string$"
+      - name: Store CRLF-ed test2.age
+        uses: actions/upload-artifact@v3
+        if: failure()
+        with:
+          name: ${{ matrix.alice }}_${{ matrix.bob }}_${{ matrix.recipient }}_test2.age
+          path: test2.age
+
+      - name: Pipes!
+        run: echo "Test string 3 - ASCII Drift" | ./${{ matrix.alice }} $AGE_PUBKEY | tee --output-error=warn test3.age | ./${{ matrix.bob }} -d -i key.txt | grep -q "^Test string 3 - ASCII Drift$"
+      - name: Store test3.age
+        uses: actions/upload-artifact@v3
+        if: failure()
+        with:
+          name: ${{ matrix.alice }}_${{ matrix.bob }}_${{ matrix.recipient }}_test3.age
+          path: test3.age
+
+      - name: Explicit stdout during encryption
+        run: ./${{ matrix.alice }} -a -o - $AGE_PUBKEY test2.txt >test4.age
+      - name: Explicit stdin during decryption
+        run: cat test4.age | ./${{ matrix.bob }} -d -i key.txt - | grep -q "^2 test 2 string$"
+      - name: Store test4.age
+        uses: actions/upload-artifact@v3
+        if: failure()
+        with:
+          name: ${{ matrix.alice }}_${{ matrix.bob }}_${{ matrix.recipient }}_test4.age
+          path: test4.age
+
+      - name: Update FiloSottile/age status with result
+        if: always() && github.event.action == 'age-interop-request'
+        run: |
+          curl -X POST https://api.github.com/repos/FiloSottile/age/statuses/${{ github.event.client_payload.sha }} \
+          -H 'Accept: application/vnd.github.everest-preview+json' \
+          -H 'Authorization: token ${{ secrets.AGE_STATUS_ACCESS_TOKEN }}' \
+          --data '{"state": "${{ job.status }}", "target_url": "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}", "description": "Finished", "context": "Interoperability tests / ${{ matrix.alice }} -> ${{ matrix.bob }} [${{ matrix.recipient }}]"}'
+#name: Publish release binaries
+
+#on: [workflow_dispatch, pull_request]
+
+#jobs:
+  release_build:
+    name: Publish for ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        name: [linux, armv7, arm64, windows, macos]
+        include:
+          - name: linux
+            os: ubuntu-18.04
+            build_deps: >
+              libfuse-dev
+            build_flags: --features mount
+            archive_name: rage.tar.gz
+            asset_suffix: x86_64-linux.tar.gz
+
+          - name: armv7
+            os: ubuntu-18.04
+            target: armv7-unknown-linux-gnueabihf
+            build_deps: >
+              gcc-arm-linux-gnueabihf
+            cargo_config: |
+              [target.armv7-unknown-linux-gnueabihf]
+              linker = "arm-linux-gnueabihf-gcc"
+            build_flags: --target armv7-unknown-linux-gnueabihf
+            archive_name: rage.tar.gz
+            asset_suffix: armv7-linux.tar.gz
+
+          - name: arm64
+            os: ubuntu-18.04
+            target: aarch64-unknown-linux-gnu
+            build_deps: >
+              gcc-aarch64-linux-gnu
+            cargo_config: |
+              [target.aarch64-unknown-linux-gnu]
+              linker = "aarch64-linux-gnu-gcc"
+            build_flags: --target aarch64-unknown-linux-gnu
+            archive_name: rage.tar.gz
+            asset_suffix: arm64-linux.tar.gz
+
+          - name: windows
+            os: windows-latest
+            archive_name: rage.zip
+            asset_suffix: x86_64-windows.zip
+
+          - name: macos
+            os: macos-latest
+            archive_name: rage.tar.gz
+            asset_suffix: x86_64-darwin.tar.gz
+
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+      - name: Add target
+        run: rustup target add ${{ matrix.target }}
+        if: matrix.target != ''
+
+      - name: Install linux build dependencies
+        run: sudo apt install ${{ matrix.build_deps }}
+        if: matrix.build_deps != ''
+
+      - name: Set up .cargo/config
+        run: |
+          mkdir .cargo
+          echo '${{ matrix.cargo_config }}' >.cargo/config
+        if: matrix.cargo_config != ''
+
+      - name: cargo build
+        run: cargo build --release --locked ${{ matrix.build_flags }}
+        working-directory: ./rage
+
+      - name: Create archive
+        run: |
+          mkdir -p release/rage
+          mv target/${{ matrix.target }}/release/rage* release/rage/
+          rm release/rage/*.d
+          tar czf ${{ matrix.archive_name }} -C release/ rage/
+        if: matrix.name != 'windows'
+
+      - name: Create archive [Windows]
+        run: |
+          mkdir -p release/rage
+          mv target/release/rage.exe release/rage/
+          mv target/release/rage-keygen.exe release/rage/
+          cd release/
+          7z.exe a ../${{ matrix.archive_name }} rage/
+        shell: bash
+        if: matrix.name == 'windows'
+
+#      - name: Upload archive to release
+#        uses: svenstaro/upload-release-action@2.3.0
+#        with:
+#          repo_token: ${{ secrets.GITHUB_TOKEN }}
+#          file: ${{ matrix.archive_name }}
+#          asset_name: rage-$tag-${{ matrix.asset_suffix }}
+#          tag: ${{ github.ref }}
+#          prerelease: true
+#        if: github.event.inputs.test != 'true'
+
+  deb:
+    name: Debian ${{ matrix.name }}
+    runs-on: ubuntu-18.04
+    strategy:
+      matrix:
+        name: [linux, linux-musl, armv7, armv7-musl, arm64, arm64-musl]
+        include:
+          - name: linux
+            target: x86_64-unknown-linux-gnu
+            build_deps: >
+              libfuse-dev
+            build_flags: --features mount
+
+          - name: linux-musl
+            target: x86_64-unknown-linux-musl
+            build_deps: >
+              musl-tools
+            deb_flags: --variant=musl
+
+          - name: armv7
+            target: armv7-unknown-linux-gnueabihf
+            build_deps: >
+              gcc-arm-linux-gnueabihf
+            cargo_config: |
+              [target.armv7-unknown-linux-gnueabihf]
+              linker = "arm-linux-gnueabihf-gcc"
+
+          - name: armv7-musl
+            target: armv7-unknown-linux-musleabihf
+            build_deps: >
+              gcc-arm-linux-gnueabihf
+              musl-tools
+            cargo_config: |
+              [target.armv7-unknown-linux-musleabihf]
+              linker = "arm-linux-gnueabihf-gcc"
+            deb_flags: --variant=musl
+
+          - name: arm64
+            target: aarch64-unknown-linux-gnu
+            build_deps: >
+              gcc-aarch64-linux-gnu
+            cargo_config: |
+              [target.aarch64-unknown-linux-gnu]
+              linker = "aarch64-linux-gnu-gcc"
+
+          - name: arm64-musl
+            target: aarch64-unknown-linux-musl
+            build_deps: >
+              gcc-aarch64-linux-gnu
+              musl-tools
+            cargo_config: |
+              [target.aarch64-unknown-linux-musl]
+              linker = "aarch64-linux-gnu-gcc"
+            deb_flags: --variant=musl
+
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+      - name: Add target
+        run: rustup target add ${{ matrix.target }}
+      - name: cargo install cargo-deb
+        uses: actions-rs/cargo@v1
+        with:
+          command: install
+          args: cargo-deb
+
+      - name: Install build dependencies
+        run: sudo apt install ${{ matrix.build_deps }}
+        if: matrix.build_deps != ''
+
+      - name: Set up .cargo/config
+        run: |
+          mkdir .cargo
+          echo '${{ matrix.cargo_config }}' >.cargo/config
+        if: matrix.cargo_config != ''
+
+      - name: cargo build
+        run: cargo build --release --locked --target ${{ matrix.target }} ${{ matrix.build_flags }}
+        working-directory: ./rage
+
+      - name: Generate completions
+        uses: actions-rs/cargo@v1
+        with:
+          command: run
+          args: --example generate-completions
+
+      - name: Generate manpages
+        uses: actions-rs/cargo@v1
+        with:
+          command: run
+          args: --example generate-docs
+
+      - name: Update Debian package config for cross-compile
+        run: sed -i '/\/rage-mount/d' rage/Cargo.toml
+        if: matrix.name != 'linux'
+
+      - name: cargo deb
+        uses: actions-rs/cargo@v1
+        with:
+          command: deb
+          args: --package rage --no-build --target ${{ matrix.target }} ${{ matrix.deb_flags }}
+
+#      - name: Upload Debian package to release
+#        uses: svenstaro/upload-release-action@2.3.0
+#        with:
+#          repo_token: ${{ secrets.GITHUB_TOKEN }}
+#          file: target/${{ matrix.target }}/debian/*.deb
+#          tag: ${{ github.ref }}
+#          file_glob: true
+#          prerelease: true
+#        if: github.event.inputs.test != 'true'
