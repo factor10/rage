@@ -12,6 +12,17 @@ jobs:
 
     steps:
       - uses: actions/checkout@v3
+      - uses: actions/cache@v3
+        id: cargo-cache
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+          key: ${{ runner.os }}-cargo-dependencies-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-dependencies
       - uses: actions-rs/toolchain@v1
         with:
           toolchain: 1.59.0
@@ -30,6 +41,11 @@ jobs:
         with:
           command: test
           args: --all --verbose --exclude rage --all-features
+      - name: Autoclean the cache
+        if: steps.cargo-cache.outputs.cache-hit != 'true'
+        run:
+          cargo install --no-default-features --features ci-autoclean cargo-cache
+          cargo-cache
 
   build:
     name: Build target ${{ matrix.target }}
@@ -41,6 +57,17 @@ jobs:
 
     steps:
       - uses: actions/checkout@v3
+      - uses: actions/cache@v3
+        id: cargo-cache
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+          key: ${{ runner.os }}-cargo-dependencies-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-dependencies
       - uses: actions-rs/toolchain@v1
         with:
           toolchain: 1.59.0
@@ -54,6 +81,11 @@ jobs:
       - name: Build for target
         working-directory: ./age
         run: cargo build --verbose --no-default-features --target ${{ matrix.target }}
+      - name: Autoclean the cache
+        if: steps.cargo-cache.outputs.cache-hit != 'true'
+        run:
+          cargo install --no-default-features --features ci-autoclean cargo-cache
+          cargo-cache
 
   bitrot:
     name: Bitrot
@@ -61,6 +93,17 @@ jobs:
 
     steps:
       - uses: actions/checkout@v3
+      - uses: actions/cache@v3
+        id: cargo-cache
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+          key: ${{ runner.os }}-cargo-dependencies-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-dependencies
       - uses: actions-rs/toolchain@v1
         with:
           toolchain: 1.59.0
@@ -72,6 +115,11 @@ jobs:
         with:
           command: check
           args: --tests --examples --benches --all-features
+      - name: Autoclean the cache
+        if: steps.cargo-cache.outputs.cache-hit != 'true'
+        run:
+          cargo install --no-default-features --features ci-autoclean cargo-cache
+          cargo-cache
 
   clippy:
     name: Clippy (1.59.0)
@@ -79,6 +127,17 @@ jobs:
 
     steps:
       - uses: actions/checkout@v3
+      - uses: actions/cache@v3
+        id: cargo-cache
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+          key: ${{ runner.os }}-cargo-dependencies-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-dependencies
       - uses: actions-rs/toolchain@v1
         with:
           toolchain: 1.59.0
@@ -92,6 +151,11 @@ jobs:
           name: Clippy (1.59.0)
           token: ${{ secrets.GITHUB_TOKEN }}
           args: --all-features --all-targets -- -D warnings
+      - name: Autoclean the cache
+        if: steps.cargo-cache.outputs.cache-hit != 'true'
+        run:
+          cargo install --no-default-features --features ci-autoclean cargo-cache
+          cargo-cache
 
   codecov:
     name: Code coverage
@@ -99,6 +163,17 @@ jobs:
 
     steps:
       - uses: actions/checkout@v3
+      - uses: actions/cache@v3
+        id: cargo-cache
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+          key: ${{ runner.os }}-cargo-dependencies-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-dependencies
       - uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
@@ -110,10 +185,15 @@ jobs:
         with:
           version: '0.19.1'
           args: --workspace --release --all-features --timeout 180 --out Xml
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v3.1.1
-        with:
-          fail_ci_if_error: true
+#      - name: Upload coverage to Codecov
+#        uses: codecov/codecov-action@v3.1.1
+#        with:
+#          fail_ci_if_error: true
+      - name: Autoclean the cache
+        if: steps.cargo-cache.outputs.cache-hit != 'true'
+        run:
+          cargo install --no-default-features --features ci-autoclean cargo-cache
+          cargo-cache
 
   doc-links:
     name: Intra-doc links
@@ -121,6 +201,16 @@ jobs:
 
     steps:
       - uses: actions/checkout@v3
+      - uses: actions/cache@v3
+        id: cargo-cache
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+          key: ${{ runner.os }}-cargo-dependencies-${{ hashFiles('**/Cargo.lock') }}
+            ${{ runner.os }}-cargo-dependencies
       - uses: actions-rs/toolchain@v1
         with:
           toolchain: 1.59.0
@@ -137,6 +227,12 @@ jobs:
         with:
           command: doc
           args: --all --exclude rage --all-features --document-private-items
+      - name: Autoclean the cache
+        if: steps.cargo-cache.outputs.cache-hit != 'true'
+        run:
+          cargo install --no-default-features --features ci-autoclean cargo-cache
+          cargo-cache
+
 
   fmt:
     name: Rustfmt
